@@ -1,0 +1,3 @@
+[submodule "msgpack-objectivec"]
+	path = msgpack-objectivec
+	url = git@github.com:msgpack/msgpack-objectivec.git

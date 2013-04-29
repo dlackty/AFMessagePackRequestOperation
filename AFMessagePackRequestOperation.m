@@ -21,7 +21,65 @@
 // THE SOFTWARE.
 
 #import "AFMessagePackRequestOperation.h"
+#import "MessagePack.h"
+
+@interface AFMessagePackRequestOperation ()
+@property (readwrite, nonatomic, strong) id responseMessagePack;
+@end
 
 @implementation AFMessagePackRequestOperation
+
++ (instancetype)messagePackRequestOperationWithRequest:(NSURLRequest *)urlRequest
+                                        success:(void (^)(NSURLRequest *request, NSHTTPURLResponse *response, id messagePack))success
+                                        failure:(void (^)(NSURLRequest *request, NSHTTPURLResponse *response, NSError *error, id messagePack))failure
+{
+  AFMessagePackRequestOperation *requestOperation = [(AFMessagePackRequestOperation *)[self alloc] initWithRequest:urlRequest];
+  [requestOperation setCompletionBlockWithSuccess:^(AFHTTPRequestOperation *operation, id responseObject) {
+    if (success) {
+      success(operation.request, operation.response, responseObject);
+    }
+  } failure:^(AFHTTPRequestOperation *operation, NSError *error) {
+    if (failure) {
+      failure(operation.request, operation.response, error, [(AFMessagePackRequestOperation *)operation responseMessagePack]);
+    }
+  }];
+  
+  return requestOperation;
+}
+
+#pragma mark - AFHTTPRequestOperation
+
++ (NSSet *)acceptableContentTypes {
+  return [NSSet setWithObjects:@"application/x-msgpack", nil];
+}
+
++ (BOOL)canProcessRequest:(NSURLRequest *)request {
+  return [[[request URL] pathExtension] isEqualToString:@"msgpack"] || [super canProcessRequest:request];
+}
+
+- (void)setCompletionBlockWithSuccess:(void (^)(AFHTTPRequestOperation *operation, id responseObject))success
+                              failure:(void (^)(AFHTTPRequestOperation *operation, NSError *error))failure
+{
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Warc-retain-cycles"
+  self.completionBlock = ^ {
+    if (self.error) {
+      if (failure) {
+        dispatch_async(self.failureCallbackQueue ?: dispatch_get_main_queue(), ^{
+          failure(self, self.error);
+        });
+      }
+    } else {
+      self.responseMessagePack = [self.responseData messagePackParse];
+      
+      if (success) {
+        dispatch_async(self.successCallbackQueue ?: dispatch_get_main_queue(), ^{
+          success(self, self.responseMessagePack);
+        });
+      }
+    }
+  };
+#pragma clang diagnostic pop
+}
 
 @end
